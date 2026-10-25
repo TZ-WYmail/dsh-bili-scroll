@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B站值班台</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">●</span>
+    <span class="brand-name">B站值班台</span>
+    <span class="brand-sub">dsh-bili-scroll 的独立管理台</span>
+  </div>
+  <div class="topbar-right">
+    <span id="conn" class="pill pill-mute">连接中…</span>
+    <span id="flash" class="flash hidden"></span>
+    <button id="refreshBtn" class="btn ghost" title="刷新状态">刷新</button>
+    <button id="runBtn" class="btn primary">立即跑一轮</button>
+  </div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="card stat">
+      <div class="stat-label">账号</div>
+      <div class="stat-value" id="statAccount">—</div>
+      <div class="stat-hint" id="statAccountHint">读数中</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">今日已挑</div>
+      <div class="stat-value"><span id="statPicked">—</span><span class="stat-unit" id="statQuota"></span></div>
+      <div class="stat-hint" id="statLastRun">今天还没跑过</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">运行环境</div>
+      <div class="stat-value" id="statEnv">—</div>
+      <div class="stat-hint" id="statEnvHint">插件 + Python venv</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">自动刷</div>
+      <div class="stat-value" id="statSchedule">—</div>
+      <div class="stat-hint" id="statScheduleHint">峰谷时段</div>
+    </div>
+  </section>
+
+  <div id="loginBanner" class="banner hidden">
+    <div>
+      <strong>还没登录 B站</strong>
+      <span class="muted">读字幕、看评论、跑一轮都需要登录；凭证只存在本机。</span>
+    </div>
+    <button id="loginBtn" class="btn">扫码登录</button>
+  </div>
+
+  <div id="runBanner" class="banner banner-run hidden">
+    <div class="run-row">
+      <span class="spinner"></span>
+      <strong>正在跑一轮…</strong>
+      <span class="muted" id="runElapsed">0 秒</span>
+      <span class="muted">可以先看下面的实时日志</span>
+    </div>
+    <button id="showLogBtn" class="btn ghost small">看日志</button>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="report" class="tab active">日报</button>
+    <button data-tab="watched" class="tab">看过的</button>
+    <button data-tab="settings" class="tab">设置</button>
+    <button data-tab="log" class="tab">日志</button>
+  </nav>
+
+  <section class="tab-body" id="tab-report">
+    <div class="report-layout">
+      <aside class="day-list card" id="dayList"></aside>
+      <article class="card report" id="reportView"><div class="empty">选择一天的日报</div></article>
+    </div>
+  </section>
+
+  <section class="tab-body hidden" id="tab-watched">
+    <div class="card watched-card">
+      <div class="watched-head">
+        <div>
+          <h2>看过的视频</h2>
+          <p class="muted">判重表里记录的全部条目，按最新在前。</p>
+        </div>
+        <div class="chips" id="watchedChips">
+          <button data-filter="all" class="chip active">全部</button>
+          <button data-filter="picked" class="chip">挑中</button>
+          <button data-filter="skipped" class="chip">跳过</button>
+        </div>
+      </div>
+      <div id="watchedList" class="watched-list"></div>
+    </div>
+  </section>
+
+  <section class="tab-body hidden" id="tab-settings">
+    <form class="card settings" id="settingsForm">
+      <div class="settings-head">
+        <div>
+          <h2>这个值班号的设定</h2>
+          <p class="muted">保存后立刻生效，下一轮就按新设定跑。</p>
+        </div>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+
+      <div class="field">
+        <label for="keywords">关注关键词 <span class="muted">一行一个，留空用内置那几组</span></label>
+        <textarea id="keywords" rows="4" placeholder="DeepSeek Harness&#10;AI 编程&#10;数码评测"></textarea>
+      </div>
+
+      <div class="grid2">
+        <div class="field">
+          <label for="perDay">每天最多挑几条 <span class="muted">0–50，0 = 只手动</span></label>
+          <input id="perDay" type="number" min="0" max="50" step="1">
+        </div>
+        <div class="field">
+          <label for="reportLevel">日报写多细</label>
+          <select id="reportLevel">
+            <option value="full">完整</option>
+            <option value="brief">薄版</option>
+            <option value="off">不写日报</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field switch-field">
+        <div>
+          <label for="peakValley">峰谷时段自动刷</label>
+          <p class="hint">打开后，只在下面两个窗口里自动跑；关着就只手动跑。</p>
+        </div>
+        <input id="peakValley" type="checkbox" class="switch">
+      </div>
+
+      <div class="grid2 windows" id="windows">
+        <label class="check"><input id="noon" type="checkbox"> 中午 <span class="muted" id="noonLabel"></span></label>
+        <label class="check"><input id="night" type="checkbox"> 晚上 <span class="muted" id="nightLabel"></span></label>
+      </div>
+
+      <details class="advanced">
+        <summary>人设 / 高级选项</summary>
+        <div class="field">
+          <label for="personaPrompt">人设提示词 <span class="muted">留空按中性说话；也可以填一个 AGENTS.md 的路径</span></label>
+          <textarea id="personaPrompt" rows="4" placeholder="例如：说话简洁、只关心 AI 编程，别用营销腔。"></textarea>
+        </div>
+
+        <div class="field switch-field">
+          <div>
+            <label for="transcribe">本地转写（无字幕的视频也能看）</label>
+            <p class="hint">需要另装转写依赖（约 1GB，含 Whisper 模型），装之前无字幕的视频会被跳过。</p>
+          </div>
+          <input id="transcribe" type="checkbox" class="switch">
+        </div>
+
+        <div class="field switch-field danger-zone">
+          <div>
+            <label for="autoComment">自动评论并 @ 我</label>
+            <p class="hint">会拿这个账号公开发言，默认关。建议一直是关的。</p>
+          </div>
+          <input id="autoComment" type="checkbox" class="switch">
+        </div>
+
+        <div class="grid2" id="commentFields">
+          <div class="field">
+            <label for="mentionName">@ 谁（昵称）</label>
+            <input id="mentionName" type="text" placeholder="留空 = 不发评论">
+          </div>
+          <div class="field">
+            <label for="commentPerRound">每轮最多几条评论</label>
+            <input id="commentPerRound" type="number" min="0" max="20" step="1">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="dmMode">投递方式</label>
+          <select id="dmMode">
+            <option value="off">只写日报，不发任何东西</option>
+            <option value="only">只私信</option>
+            <option value="both">评论 + 私信</option>
+          </select>
+        </div>
+      </details>
+
+      <div class="settings-foot">
+        <span class="muted" id="settingsNote">设置写在插件自己的 config.json 里，DSH 那边的设置页看到的也是同一份。</span>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="tab-body hidden" id="tab-log">
+    <div class="card log-card">
+      <div class="log-head">
+        <h2>运行日志</h2>
+        <div class="log-tools">
+          <span class="muted" id="logPath"></span>
+          <button id="logRefresh" class="btn ghost small">刷新</button>
+          <label class="check small"><input id="logFollow" type="checkbox" checked> 自动跟随</label>
+          <label class="check small"><input id="logFull" type="checkbox"> 显示完整输出</label>
+        </div>
+      </div>
+      <pre id="logView" class="log"></pre>
+    </div>
+  </section>
+</main>
+
+<div id="qrModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h2>扫码登录 B站</h2>
+        <p class="muted">手机 B站 → 我的 → 扫一扫；确认时选「记住我 / 长期」。</p>
+      </div>
+      <button id="qrClose" class="icon-btn" aria-label="关闭">×</button>
+    </div>
+    <div class="qr-wrap"><img id="qrImg" alt="登录二维码"></div>
+    <p class="muted center" id="qrState">二维码加载中…</p>
+    <button id="qrRefresh" class="btn ghost small">换一张</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
