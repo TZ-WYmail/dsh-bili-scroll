@@ -2206,6 +2206,21 @@ function reportMeta() {
     }
 
     if (req.method === 'POST' && path === '/api/bili-duty/run') {
+      // ⭐ 前置校验：没登录 / 依赖没装好时别起一轮 —— 否则那一轮读不到字幕，
+      //    只会在报告里写「因无字幕跳过 N 条」，白白烧 token。
+      const notReady = []
+      if (!hasCredential()) notReady.push('未登录 B站')
+      if (!venvReadyNow()) notReady.push('运行依赖未装好')
+      if (notReady.length > 0) {
+        log(`这一轮没跑（前置检查未通过）：${notReady.join('、')}`)
+        return sendJson(res, 409, {
+          ok: false,
+          started: false,
+          code: 'NOT_READY',
+          missing: notReady,
+          error: `先处理：${notReady.join('、')}`,
+        })
+      }
       if (cfg.dmMode !== 'off' && !(Number(cfg.dmUid) > 0)) await warmDmUid()
       return sendJson(res, 200, { ok: true, ...runDuty('manual') })
     }
