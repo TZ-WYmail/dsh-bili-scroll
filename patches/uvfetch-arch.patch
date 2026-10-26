@@ -1,0 +1,21 @@
+--- a/lib/uvfetch.mjs
++++ b/lib/uvfetch.mjs
+@@ -22,10 +22,15 @@
+ import { Readable } from 'node:stream'
+ import { pipeline } from 'node:stream/promises'
+ 
++/**
++ * uv 官方 release 的资产名按 CPU 架构区分；按 process.arch 选，未知架构退回 x86_64。
++ * （回移自 fork 分支 dsh/duty-manager：arm64 机器不再下到 x86-64 二进制。）
++ */
++const UV_ARCH = { arm64: 'aarch64', x64: 'x86_64', ia32: 'i686', arm: 'armv7' }[process.arch] || 'x86_64'
+ const ASSETS = {
+-  win32: { name: 'uv-x86_64-pc-windows-msvc.zip', bin: 'uv.exe' },
+-  darwin: { name: 'uv-aarch64-apple-darwin.tar.gz', bin: 'uv' },
+-  linux: { name: 'uv-x86_64-unknown-linux-gnu.tar.gz', bin: 'uv' },
++  win32: { name: `uv-${UV_ARCH}-pc-windows-msvc.zip`, bin: 'uv.exe' },
++  darwin: { name: `uv-${UV_ARCH}-apple-darwin.tar.gz`, bin: 'uv' },
++  linux: { name: `uv-${UV_ARCH}-unknown-linux-gnu.tar.gz`, bin: 'uv' },
+ }
+ 
+ /** 算一个文件的 sha256 */

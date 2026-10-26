@@ -53,6 +53,17 @@ cd manager
 
 停机：`kill "$(cat ~/.local/state/bili-duty-manager.pid)"`；日志：`~/.local/state/bili-duty-manager.log`。
 
+## 运行前置
+
+`POST /api/bili-duty/run` 在起 headless 之前会检查：
+
+- `loggedIn`：家目录里有 `bili_credential.json`
+- `venvReady`：venv 里的 Python 能 import 齐 4 个依赖
+
+不满足时返回 `409 { ok:false, code:'NOT_READY', missing:[...] }`，**不会起一轮**。
+值班台据此把「立即跑一轮」置灰并显示原因（`runBlockReason` / `updateRunState`），
+避免没登录时跑出一份「因无字幕跳过 N 条」的日报、白烧 token。
+
 ## 与上游升级的关系
 
 - 插件升级（`dsh plugin --profile web add ...`）不影响 `manager/`。
@@ -65,6 +76,9 @@ cd manager
 v2.0.4 的 `lib/uvfetch.mjs` 在 Linux 上写死了 `uv-x86_64-unknown-linux-gnu.tar.gz`，
 在 aarch64 机器上会下到 x86-64 二进制（执行报 ENOENT），导致「装依赖」整条失败。
 本分支附带一个最小修复（按 `process.arch` 选资产，回移自上游 2.1.0 的做法）。
+
+已安装的 2.0.4 副本可以直接打 `patches/uvfetch-arch.patch`（`git apply` 或
+`patch -p1`），升级后需要重打一次。
 
 即使不修，也可以手动绕过：
 
