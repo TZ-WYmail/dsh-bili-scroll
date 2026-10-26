@@ -13,6 +13,7 @@ const state = {
   filter: 'all',
   seen: [],
   activeTab: 'report',
+  connected: false,
 }
 
 /* ── tiny helpers ─────────────────────────────────────────────── */
@@ -109,6 +110,8 @@ async function loadMe() {
 }
 
 function setConn(ok) {
+  state.connected = ok
+  updateRunState()
   const el = $('#conn')
   el.textContent = ok ? '已连接' : 'Harness 未响应'
   el.className = 'pill ' + (ok ? 'pill-ok' : 'pill-bad')
@@ -129,6 +132,7 @@ function renderStats() {
     ? `上次跑完：${fmtTime(lastAt)}`
     : (status.pickedToday > 0 ? `今天挑过 ${status.pickedToday} 条` : '今天还没跑过')
   loadMe()
+  updateRunState()
 }
 
 function renderSchedule() {
@@ -346,13 +350,44 @@ function renderLog(text) {
 
 /* ── run a round ──────────────────────────────────────────────── */
 
+/** 当前为什么不能跑；空串表示可以。 */
+function runBlockReason() {
+  if (state.running) return '正在跑'
+  if (!state.connected || !state.status) return 'Harness 未连接'
+  if (!state.status.loggedIn) return '先扫码登录'
+  if (!state.status.venvReady) return '先装依赖'
+  return ''
+}
+
+/** 按钮状态机：不可跑时禁用并说明原因；配额满了给出提示但不拦。 */
+function updateRunState() {
+  const reason = runBlockReason()
+  const button = $('#runBtn')
+  const hint = $('#runHint')
+  if (!button || !hint) return
+  button.disabled = Boolean(reason) || state.running
+  button.title = reason || '手动跑一轮'
+  const status = state.status
+  const quotaFull = status && status.config && status.config.perDay > 0 &&
+    Number(status.pickedToday || 0) >= Number(status.config.perDay)
+  const note = state.running ? '' : (reason || (quotaFull ? '今日配额已满，这一轮只出报告' : ''))
+  hint.textContent = note
+  hint.classList.toggle('warn', Boolean(reason) && !state.running)
+}
+
 async function runNow() {
   if (state.running) { toast('这一轮还在跑'); return }
+  const reason = runBlockReason()
+  if (reason) {
+    toast('现在不能跑：' + reason, true)
+    if (reason === '先扫码登录') openLogin()
+    return
+  }
   const button = $('#runBtn')
   button.disabled = true
   const body = await api('/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
   if (!body.ok || body.started === false) {
-    button.disabled = false
+    updateRunState()
     toast(body.error || body.reason || '起不来这一轮', true)
     return
   }
@@ -363,7 +398,7 @@ function startRunning() {
   state.running = true
   state.runStartedAt = Date.now()
   $('#runBanner').classList.remove('hidden')
-  $('#runBtn').disabled = true
+  updateRunState()
   $('#runBtn').textContent = '运行中…'
   setTab('log')
   clearInterval(state.timers.elapsed)
@@ -396,7 +431,7 @@ function stopRunning() {
   clearInterval(state.timers.log)
   clearInterval(state.timers.elapsed)
   $('#runBanner').classList.add('hidden')
-  $('#runBtn').disabled = false
+  updateRunState()
   $('#runBtn').textContent = '立即跑一轮'
   loadReports()
 }
